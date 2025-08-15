@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OPEN Watchlist — Hybrid Build (Auto-Setup)</title>
+<meta name="theme-color" content="#0b0f14">
+<style>
+  :root{ --bg:#0b0f14; --card:#121821; --muted:#8aa0b4; --text:#e7f0f7; --accent:#5cc8ff; --red:#ff6b6b; --green:#4cd964; --border:#1f2a36; }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{position:sticky;top:0;background:rgba(11,15,20,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 14px}
+  .title{display:flex;align-items:center;justify-content:space-between}.badge{padding:4px 8px;border-radius:999px;background:#0f2533;color:#bfeaff;font-size:12px}
+  main{max-width:1100px;margin:0 auto;padding:12px 14px}.grid{display:grid;gap:12px;grid-template-columns:1fr}.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--border);padding:8px 6px}th{color:#b9c9d9} .right{text-align:right}
+  .pill{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid var(--border);margin-right:6px}.good{color:#4cd964}.bad{color:#ff6b6b}.muted{color:#8aa0b4;font-size:12px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tab{padding:8px 12px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#10171f}.tab.active{background:#0f2533;color:#bfeaff}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center} input{width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:#0e141c;color:var(--text)}
+  button{padding:10px 12px;border-radius:10px;border:1px solid #223444;background:linear-gradient(180deg,#1d2a36,#12202b);color:#d7f1ff;font-weight:700;cursor:pointer}
+  .primary{background:linear-gradient(180deg,#0e3a4f,#0b2d3f);border-color:#205a76}
+  .alert{border-left:4px solid var(--accent);padding:10px 12px;background:#0f1a24;border-radius:10px;margin:8px 0;display:none}.alert.show{display:block}
+  .alert.good{border-left-color:#4cd964;background:#0f2218}.alert.bad{border-left-color:#ff6b6b;background:#201416}
+  .newslist a{color:#bfeaff;text-decoration:none}.newslist li{margin:6px 0}
+  .chip{display:inline-block;padding:6px 10px;border:1px solid var(--border);border-radius:999px;cursor:pointer;background:#0e141c;margin-right:6px}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <div style="font-weight:900">OPEN Watchlist — Hybrid</div>
+    <div class="badge" id="asof">Loading…</div>
+  </div>
+  <div class="muted">Tip: Add to Home Screen in Safari</div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="core">Core Watchlist</div>
+    <div class="tab" data-tab="penny">Penny Radar</div>
+    <div class="tab" data-tab="pl">P/L</div>
+    <div class="tab" data-tab="alerts">Alerts</div>
+    <div class="tab" data-tab="news">News & Sentiment</div>
+  </div>
+
+  <div id="panel-core" class="grid">
+    <section class="card">
+      <h3>Core (auto-refresh via backend)</h3>
+      <div class="muted">Backend: <span id="backendTag"></span>
+        <span class="chip" id="btnSetBackend">Set/Change</span>
+      </div>
+      <table id="tblCore"><thead><tr><th>Ticker</th><th class="right">Price</th><th class="right">Change %</th><th>Notes</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card">
+      <h3>Key Zones</h3>
+      <div class="pill good">OPEN support: $2.30–2.40</div>
+      <div class="pill">OPEN breakout: $3.50</div>
+      <div class="pill bad">OPEN hard stop: $1.80</div>
+    </section>
+  </div>
+
+  <div id="panel-penny" class="grid" style="display:none">
+    <section class="card">
+      <h3>Penny Radar</h3>
+      <table id="tblPenny"><thead><tr><th>Ticker</th><th class="right">Price</th><th class="right">Change %</th><th>Setup</th></tr></thead><tbody></tbody></table>
+      <div class="row" style="margin-top:8px">
+        <input id="newTicker" placeholder="Add ticker e.g., KULR">
+        <button class="primary" id="btnAdd">Add</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="panel-pl" class="grid" style="display:none">
+    <section class="card">
+      <h3>P/L Calculator</h3>
+      <table id="tblPL"><thead><tr><th>Ticker</th><th class="right">Shares</th><th class="right">Avg Cost</th><th class="right">Price</th><th class="right">Cost</th><th class="right">Value</th><th class="right">P/L $</th><th class="right">P/L %</th></tr></thead><tbody></tbody></table>
+      <div class="row" style="margin-top:8px"><button id="btnSavePL" class="primary">Save</button><button id="btnClearPL">Clear</button></div>
+    </section>
+  </div>
+
+  <div id="panel-alerts" class="grid" style="display:none">
+    <section class="card">
+      <h3>OPEN Alerts</h3>
+      <div class="row">
+        <div style="flex:1"><label class="muted">Breakout</label><input id="breakoutLv" type="number" value="3.50" step="0.01"></div>
+        <div style="flex:1"><label class="muted">Warning</label><input id="warnLv" type="number" value="2.30" step="0.01"></div>
+        <div style="flex:1"><label class="muted">Hard stop</label><input id="stopLv" type="number" value="1.80" step="0.01"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="btnTest" class="primary">Test Alert</button></div>
+      <div class="alert" id="toastBox"></div>
+    </section>
+  </div>
+
+  <div id="panel-news" class="grid" style="display:none">
+    <section class="card">
+      <h3>Fresh Headlines</h3>
+      <ul id="newsList" class="newslist"></ul>
+    </section>
+    <section class="card">
+      <h3>Reddit Pulse</h3>
+      <ul id="redditList" class="newslist"></ul>
+    </section>
+  </div>
+</main>
+
+<script>
+// ====== BACKEND BASE (auto-setup) ======
+let BACKEND_BASE = "https://YOUR-BACKEND.example.com";
+try{
+  const saved = localStorage.getItem("backend_base");
+  if(saved) BACKEND_BASE = saved;
+  if(BACKEND_BASE.includes("YOUR-BACKEND")){
+    const maybe = prompt("Enter your backend base URL (e.g., https://open-realtime.netlify.app):");
+    if(maybe && /^https?:\/\//.test(maybe)){ BACKEND_BASE = maybe.replace(/\/$/,''); localStorage.setItem("backend_base", BACKEND_BASE); }
+  }
+}catch(e){}
+document.getElementById('backendTag').textContent = BACKEND_BASE || "(not set)";
+document.getElementById('btnSetBackend').addEventListener('click', ()=>{
+  const maybe = prompt("Enter your backend base URL (e.g., https://open-realtime.netlify.app):", BACKEND_BASE);
+  if(maybe && /^https?:\/\//.test(maybe)){ BACKEND_BASE = maybe.replace(/\/$/,''); localStorage.setItem("backend_base", BACKEND_BASE); location.reload(); }
+});
+
+// ====== Tickers & State ======
+const CORE = ["OPEN","LX","BEST","LCID","META","2222.SR"];
+const PENNY = ["KULR","SNTG","IONQ","BBIG","GNS"];
+const STATE = { quotes:{}, holdings:{}, penny:[...PENNY] };
+
+// Prefill your OPEN holdings & last known price
+STATE.quotes["OPEN"] = { price: 3.29, changePct: 0 };
+try{
+  const h = JSON.parse(localStorage.getItem("holdings")||"null");
+  if (!h || !h["OPEN"]) {
+    STATE.holdings["OPEN"] = {"shares":"15010.2311","cost":"2.24"};
+    localStorage.setItem("holdings", JSON.stringify(STATE.holdings));
+  } else {
+    STATE.holdings = h;
+  }
+}catch(e){}
+
+// UI helpers
+function setTab(name){ ["core","penny","pl","alerts","news"].forEach(t=>{
+  document.querySelector("#panel-"+t).style.display = (t===name) ? "" : "none";
+  [...document.querySelectorAll(".tab")].forEach(el=> el.classList.toggle("active", el.dataset.tab===t));
+}); }
+document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=> setTab(el.dataset.tab)));
+function fmt(n, dp=2){ return (n==null || isNaN(n)) ? "—" : Number(n).toFixed(dp); }
+function stamp(){ document.getElementById("asof").textContent = "Updated " + new Date().toLocaleString(); }
+function toast(msg){ const box = document.getElementById("toastBox"); box.textContent = msg; box.classList.add("show"); setTimeout(()=> box.classList.remove("show"), 3000); }
+
+// Backend calls
+async function fetchQuotes(symbols){
+  const url = BACKEND_BASE + "/.netlify/functions/quotes?symbols=" + encodeURIComponent(symbols.join(","));
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json();
+  symbols.forEach(sym=>{
+    const q = j.quotes?.[sym];
+    if (q && q.price != null) STATE.quotes[sym] = { price:q.price, changePct:q.changePct };
+  });
+}
+async function fetchNews(symbols){
+  const url = BACKEND_BASE + "/.netlify/functions/news?symbols=" + encodeURIComponent(symbols.join(","));
+  const r = await fetch(url, { cache: "no-store" }); return await r.json();
+}
+async function fetchSentiment(sym){
+  const url = BACKEND_BASE + "/.netlify/functions/sentiment?symbol=" + encodeURIComponent(sym);
+  const r = await fetch(url, { cache: "no-store" }); return await r.json();
+}
+
+// Renderers
+function renderCore(){
+  const body = document.querySelector("#tblCore tbody"); body.innerHTML = "";
+  CORE.forEach(sym=>{
+    const q = STATE.quotes[sym] || {};
+    const priceCell = (q.price != null) ? fmt(q.price) : "—";
+    const chCell = (q.changePct != null) ? fmt(q.changePct,2)+"%" : "—";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td><td class="right">${priceCell}</td><td class="right" style="color:${(q.changePct||0)>=0?'#4cd964':'#ff6b6b'}">${chCell}</td><td>${sym==='OPEN'?'$3.50/$2.30/$1.80':''}</td>`;
+    body.appendChild(tr);
+  });
+}
+function renderPenny(){
+  const body = document.querySelector("#tblPenny tbody"); body.innerHTML = "";
+  STATE.penny.forEach(sym=>{
+    const q = STATE.quotes[sym] || {};
+    const priceCell = (q.price != null) ? fmt(q.price) : "—";
+    const chCell = (q.changePct != null) ? fmt(q.changePct,2)+"%" : "—";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td><td class="right">${priceCell}</td><td class="right" style="color:${(q.changePct||0)>=0?'#4cd964':'#ff6b6b'}">${chCell}</td><td>Momentum</td>`;
+    body.appendChild(tr);
+  });
+}
+function renderPL(){
+  const body = document.querySelector("#tblPL tbody"); body.innerHTML = "";
+  const list = [...CORE, ...STATE.penny];
+  list.forEach(sym=>{
+    const hold = STATE.holdings[sym] || { shares:"", cost:"" };
+    const q = STATE.quotes[sym] || {};
+    const shares = parseFloat(hold.shares)||0, cost = parseFloat(hold.cost)||0, price = parseFloat(q.price)||0;
+    const totalCost = shares*cost, value = shares*price, pl = value-totalCost, plPct = totalCost>0 ? (pl/totalCost*100) : 0;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td>
+      <td class="right"><input data-sym="${sym}" data-k="shares" value="${hold.shares}" placeholder="0"></td>
+      <td class="right"><input data-sym="${sym}" data-k="cost" value="${hold.cost}" placeholder="0.00"></td>
+      <td class="right">${fmt(price)}</td>
+      <td class="right">${fmt(totalCost)}</td>
+      <td class="right">${fmt(value)}</td>
+      <td class="right" style="color:${pl>=0?'#4cd964':'#ff6b6b'}">${fmt(pl)}</td>
+      <td class="right" style="color:${pl>=0?'#4cd964':'#ff6b6b'}">${fmt(plPct,2)}%</td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const sym = inp.dataset.sym, k = inp.dataset.k;
+      STATE.holdings[sym] = STATE.holdings[sym]||{};
+      STATE.holdings[sym][k] = inp.value;
+      localStorage.setItem("holdings", JSON.stringify(STATE.holdings));
+      renderPL();
+    });
+  });
+}
+
+// Loop
+async function tick(){
+  const syms = [...CORE, ...STATE.penny];
+  try{ await fetchQuotes(syms); }catch(e){}
+  renderCore(); renderPenny(); renderPL(); stamp();
+}
+
+// Start
+document.getElementById("btnSavePL").addEventListener("click", ()=>{ localStorage.setItem("holdings", JSON.stringify(STATE.holdings)); stamp(); });
+document.getElementById("btnClearPL").addEventListener("click", ()=>{ STATE.holdings={}; localStorage.removeItem("holdings"); renderPL(); });
+document.getElementById("btnAdd").addEventListener("click", ()=>{
+  const v = (document.getElementById("newTicker").value||"").trim().toUpperCase();
+  if(v && !STATE.penny.includes(v)){ STATE.penny.push(v); localStorage.setItem("penny", JSON.stringify(STATE.penny)); tick(); }
+  document.getElementById("newTicker").value="";
+});
+document.getElementById("btnTest").addEventListener("click", ()=> toast("Test alert fired"));
+
+(async function init(){
+  setTab("core");
+  try{
+    const pr = JSON.parse(localStorage.getItem("penny")||"null");
+    if(pr && Array.isArray(pr)) STATE.penny = pr;
+    const h = JSON.parse(localStorage.getItem("holdings")||"null");
+    if(h) STATE.holdings = h;
+  }catch(e){}
+  await tick();
+  setInterval(tick, 60000);
+
+  try{
+    const feed = await fetchNews(CORE);
+    const list = document.getElementById("newsList"); list.innerHTML = "";
+    (feed.news||[]).slice(0,12).forEach(n=>{
+      const li = document.createElement("li");
+      const d = new Date(n.publishedAt); const t = isNaN(d)? "" : " — " + d.toLocaleString();
+      li.innerHTML = `<a href="${n.url}" target="_blank">${n.title}</a><span class="muted">${t}</span>`;
+      list.appendChild(li);
+    });
+  }catch(e){}
+
+  try{
+    const s = await fetchSentiment("OPEN");
+    const list = document.getElementById("redditList"); list.innerHTML = "";
+    (s.reddit?.items||[]).slice(0,10).forEach(r=>{
+      const d = r.created_utc ? " — " + new Date(r.created_utc*1000).toLocaleString() : "";
+      const li = document.createElement("li"); li.innerHTML = `<a href="${r.url}" target="_blank">[r/${r.sub}] ${r.title}</a><span class="muted">${d}</span>`;
+      list.appendChild(li);
+    });
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
