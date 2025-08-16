@@ -1,0 +1,194 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPEN Watchlist — Live</title>
+<meta name="theme-color" content="#0b0f14">
+<style>
+  :root{ --bg:#0b0f14; --card:#121821; --muted:#9bb0c6; --text:#e7f0f7; --accent:#5cc8ff; --red:#ff6b6b; --green:#4cd964; --border:#1f2a36; }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{position:sticky;top:0;background:rgba(11,15,20,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 16px}
+  .title{display:flex;align-items:center;justify-content:space-between}
+  .badge{padding:4px 8px;border-radius:999px;background:#0f2533;color:#bfeaff;font-size:12px}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .grid{display:grid;gap:16px;grid-template-columns:1fr} .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{border-bottom:1px solid var(--border);padding:8px 6px} th{color:#b9c9d9} .right{text-align:right}
+  .muted{color:var(--muted);font-size:12px}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid var(--border);margin-right:6px; margin-bottom:6px}
+  .good{color:var(--green)} .bad{color:var(--red)}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .tab{padding:8px 12px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#10171f}
+  .tab.active{background:#0f2533;color:#bfeaff}
+  input{width:100%;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:#0e141c;color:#e7f0f7}
+  a{color:#bfeaff;text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <div style="font-weight:900">OPEN Watchlist — Live</div>
+    <div class="badge" id="asof">Loading…</div>
+  </div>
+  <div class="muted">Backend: <span id="backendTag"></span></div>
+</header>
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="core">Core</div>
+    <div class="tab" data-tab="penny">Penny</div>
+    <div class="tab" data-tab="pl">P/L</div>
+    <div class="tab" data-tab="news">News</div>
+  </div>
+
+  <div id="panel-core" class="grid">
+    <section class="card"><h3>Core Watchlist</h3>
+      <table id="tblCore"><thead><tr><th>Ticker</th><th class="right">Price</th><th class="right">Chg%</th><th>Notes</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card"><h3>Key Zones</h3>
+      <div class="pill good">OPEN support: $2.30–2.40</div>
+      <div class="pill">OPEN breakout: $3.50</div>
+      <div class="pill bad">OPEN hard stop: $1.80</div>
+    </section>
+  </div>
+
+  <div id="panel-penny" class="grid" style="display:none">
+    <section class="card"><h3>Penny Radar</h3>
+      <table id="tblPenny"><thead><tr><th>Ticker</th><th class="right">Price</th><th class="right">Chg%</th><th>Setup</th></tr></thead><tbody></tbody></table>
+    </section>
+  </div>
+
+  <div id="panel-pl" class="grid" style="display:none">
+    <section class="card"><h3>P/L</h3>
+      <table id="tblPL"><thead><tr><th>Ticker</th><th class="right">Shares</th><th class="right">Avg Cost</th><th class="right">Price</th><th class="right">Cost</th><th class="right">Value</th><th class="right">P/L $</th><th class="right">P/L %</th></tr></thead><tbody></tbody></table>
+    </section>
+  </div>
+
+  <div id="panel-news" class="grid" style="display:none">
+    <section class="card"><h3>Fresh Headlines</h3>
+      <ul id="newsList"></ul>
+    </section>
+  </div>
+</main>
+
+<script>
+const BACKEND_BASE = "https://opendoorstock.netlify.app";
+document.getElementById('backendTag').textContent = BACKEND_BASE;
+
+const CORE = ["OPEN","LX","BEST","LCID","META","2222.SR"];
+const PENNY = ["KULR","SNTG","IONQ","BBIG","GNS"];
+const STATE = { quotes:{}, holdings:{}, penny:[...PENNY] };
+
+// preload your OPEN position so P/L tab works out of the box (can be edited in the UI)
+try{
+  const h = JSON.parse(localStorage.getItem("holdings")||"null");
+  if(!h || !h["OPEN"]){
+    STATE.holdings["OPEN"] = {"shares":"15010.2311","cost":"2.24"};
+    localStorage.setItem("holdings", JSON.stringify(STATE.holdings));
+  }else{
+    STATE.holdings = h;
+  }
+}catch(e){}
+
+function fmt(n, dp=2){ return (n==null || isNaN(n)) ? "—" : Number(n).toFixed(dp); }
+function setTab(name){
+  ["core","penny","pl","news"].forEach(t=>{
+    document.querySelector("#panel-"+t).style.display=(t===name)?"":"none";
+    [...document.querySelectorAll(".tab")].forEach(el=> el.classList.toggle("active", el.dataset.tab===t));
+  });
+}
+document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=> setTab(el.dataset.tab)));
+
+function stamp(){ document.getElementById("asof").textContent = "Updated " + new Date().toLocaleString(); }
+
+async function fetchQuotes(list){
+  const url = BACKEND_BASE + "/.netlify/functions/quotes?symbols=" + encodeURIComponent(list.join(","));
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json();
+  const out = {};
+  list.forEach(sym=>{ const q = j.quotes?.[sym]; if(q && q.price!=null) out[sym]=q; });
+  return out;
+}
+async function fetchNews(list){
+  const url = BACKEND_BASE + "/.netlify/functions/news?symbols=" + encodeURIComponent(list.join(","));
+  const r = await fetch(url, { cache:"no-store" });
+  return await r.json();
+}
+
+function renderCore(){
+  const body = document.querySelector("#tblCore tbody"); body.innerHTML="";
+  CORE.forEach(sym=>{
+    const q = STATE.quotes[sym]||{};
+    const priceCell = (q.price!=null)? fmt(q.price):"—";
+    const chCell = (q.changePct!=null)? fmt(q.changePct,2)+"%":"—";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td><td class="right">${priceCell}</td><td class="right" style="color:${(q.changePct||0)>=0?'#4cd964':'#ff6b6b'}">${chCell}</td><td>${sym==='OPEN'?'$3.50/$2.30/$1.80':''}</td>`;
+    body.appendChild(tr);
+  });
+}
+function renderPenny(){
+  const body = document.querySelector("#tblPenny tbody"); body.innerHTML="";
+  STATE.penny.forEach(sym=>{
+    const q = STATE.quotes[sym]||{};
+    const priceCell=(q.price!=null)?fmt(q.price):"—";
+    const chCell=(q.changePct!=null)?fmt(q.changePct,2)+"%":"—";
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td><td class="right">${priceCell}</td><td class="right" style="color:${(q.changePct||0)>=0?'#4cd964':'#ff6b6b'}">${chCell}</td><td>Momentum</td>`;
+    body.appendChild(tr);
+  });
+}
+function renderPL(){
+  const body = document.querySelector("#tblPL tbody"); body.innerHTML="";
+  const list=[...CORE, ...STATE.penny];
+  list.forEach(sym=>{
+    const hold=STATE.holdings[sym]||{shares:"",cost:""};
+    const q=STATE.quotes[sym]||{};
+    const shares=parseFloat(hold.shares)||0, cost=parseFloat(hold.cost)||0, price=parseFloat(q.price)||0;
+    const totalCost=shares*cost, value=shares*price, pl=value-totalCost, plPct= totalCost>0 ? (pl/totalCost*100):0;
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td>${sym}</td>
+      <td class="right"><input data-sym="${sym}" data-k="shares" value="${hold.shares}" placeholder="0"></td>
+      <td class="right"><input data-sym="${sym}" data-k="cost" value="${hold.cost}" placeholder="0.00"></td>
+      <td class="right">${fmt(price)}</td>
+      <td class="right">${fmt(totalCost)}</td>
+      <td class="right">${fmt(value)}</td>
+      <td class="right" style="color:${pl>=0?'#4cd964':'#ff6b6b'}">${fmt(pl)}</td>
+      <td class="right" style="color:${pl>=0?'#4cd964':'#ff6b6b'}">${fmt(plPct,2)}%</td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const sym=inp.dataset.sym, k=inp.dataset.k;
+      STATE.holdings[sym]=STATE.holdings[sym]||{}; STATE.holdings[sym][k]=inp.value;
+      localStorage.setItem("holdings", JSON.stringify(STATE.holdings)); renderPL();
+    });
+  });
+}
+
+async function tick(){
+  const syms=[...CORE, ...STATE.penny];
+  try{
+    const m = await fetchQuotes(syms);
+    STATE.quotes = { ...STATE.quotes, ...m };
+    renderCore(); renderPenny(); renderPL(); stamp();
+  }catch(e){
+    document.getElementById("asof").textContent = "Fetch error — " + e.message;
+  }
+}
+(async function init(){
+  setTab("core");
+  await tick();
+  setInterval(tick, 60000);
+  try{
+    const feed = await fetchNews(CORE);
+    const list=document.getElementById("newsList"); if(list){ list.innerHTML="";
+      (feed.news||[]).slice(0,12).forEach(n=>{
+        const li=document.createElement("li"); const d=new Date(n.publishedAt); const t=isNaN(d)? "":" — "+d.toLocaleString();
+        li.innerHTML=`<a href="${n.url}" target="_blank">${n.title}</a><span class="muted">${t}</span>`;
+        list.appendChild(li);
+      });
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
