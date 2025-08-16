@@ -1,0 +1,15 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPEN Watchlist — Hard‑coded Backend</title>
+<meta name="theme-color" content="#0b0f14">
+<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0b0f14;color:#e7f0f7}header{position:sticky;top:0;background:rgba(11,15,20,.9);backdrop-filter:blur(8px);border-bottom:1px solid #1f2a36;padding:10px 14px}.title{display:flex;align-items:center;justify-content:space-between}.badge{padding:4px 8px;border-radius:999px;background:#0f2533;color:#bfeaff;font-size:12px}.card{background:#121821;border:1px solid #1f2a36;border-radius:14px;padding:14px;margin:12px}table{width:calc(100% - 24px);margin:0 12px;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid #1f2a36;padding:8px 6px}th{color:#b9c9d9}.right{text-align:right}</style></head><body>
+<header><div class="title"><div style="font-weight:900">OPEN Watchlist — Live</div><div class="badge" id="asof">Loading…</div></div><div style="color:#8aa0b4;margin:8px 12px 0">Backend: https://opendoorstock.netlify.app</div></header>
+<div class="card"><h3 style="margin:0 0 8px">Watchlist</h3><table id="tbl"><thead><tr><th>Ticker</th><th class="right">Price</th><th class="right">Chg%</th><th>Note</th></tr></thead><tbody></tbody></table></div>
+<script>
+const BACKEND_BASE = "https://opendoorstock.netlify.app";
+const CORE = ["OPEN","LX","BEST","LCID","META","2222.SR"]; const PENNY = ["KULR","SNTG","IONQ","BBIG","GNS"];
+function fmt(n,d=2){return(n==null||isNaN(n))?"—":Number(n).toFixed(d)} function stamp(){document.getElementById("asof").textContent="Updated "+new Date().toLocaleString()}
+async function fetchQuotes(list){const url=BACKEND_BASE+"/.netlify/functions/quotes?symbols="+encodeURIComponent(list.join(","));const r=await fetch(url,{cache:"no-store"});const j=await r.json();const out={};list.forEach(s=>{const q=j.quotes?.[s];if(q&&q.price!=null)out[s]=q;});return out;}
+function render(map){const body=document.querySelector("#tbl tbody");body.innerHTML="";[...CORE,...PENNY].forEach(sym=>{const q=map[sym]||{};const p=(q.price!=null)?fmt(q.price):"—";const ch=(q.changePct!=null)?fmt(q.changePct,2)+"%":"—";const tr=document.createElement("tr");tr.innerHTML=`<td>${sym}</td><td class="right">${p}</td><td class="right" style="color:${(q.changePct||0)>=0?'#4cd964':'#ff6b6b'}">${ch}</td><td>${sym==='OPEN'?'$3.50/$2.30/$1.80':''}</td>`;body.appendChild(tr);});stamp();}
+async function tick(){const syms=[...CORE,...PENNY];const m=await fetchQuotes(syms);render(m);}
+tick(); setInterval(tick,60000);
+</script></body></html>
