@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPEN Watchlist — News & Memes</title>
+<meta name="theme-color" content="#0b0f14">
+<style>
+  :root{ --bg:#0b0f14; --card:#121821; --muted:#9bb0c6; --text:#e7f0f7; --accent:#5cc8ff; --border:#1f2a36; }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{position:sticky;top:0;background:rgba(11,15,20,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 16px}
+  .title{display:flex;align-items:center;justify-content:space-between}
+  .badge{padding:4px 8px;border-radius:999px;background:#0f2533;color:#bfeaff;font-size:12px}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .tab{padding:8px 12px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#10171f}
+  .tab.active{background:#0f2533;color:#bfeaff}
+  ul{margin:0;padding-left:18px}
+  .muted{color:var(--muted);font-size:12px}
+  a{color:#bfeaff;text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <div style="font-weight:900">OPEN Watchlist — News & Memes</div>
+    <div class="badge" id="asof">Loading…</div>
+  </div>
+  <div class="muted">Backend: <span id="backend"></span></div>
+</header>
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="news">News</div>
+    <div class="tab" data-tab="memes">Memes</div>
+  </div>
+
+  <section id="panel-news" class="card">
+    <h3>Fresh Headlines</h3>
+    <ul id="newsList"></ul>
+  </section>
+
+  <section id="panel-memes" class="card" style="display:none">
+    <h3>Memes Radar <span id="mood" class="muted"></span></h3>
+    <ul id="memesList"></ul>
+  </section>
+</main>
+
+<script>
+const BACKEND_BASE = "https://opendoorstock.netlify.app";
+document.getElementById("backend").textContent = BACKEND_BASE;
+const CORE = ["OPEN","LX","BEST","LCID","META","2222.SR"];
+function setTab(name){
+  ["news","memes"].forEach(t=>{
+    document.querySelector("#panel-"+t).style.display = (t===name)? "":"none";
+    [...document.querySelectorAll(".tab")].forEach(el=> el.classList.toggle("active", el.dataset.tab===t));
+  });
+}
+document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=> setTab(el.dataset.tab)));
+
+function stamp(){ document.getElementById("asof").textContent = "Updated " + new Date().toLocaleString(); }
+
+async function loadNews(){
+  const url = BACKEND_BASE + "/.netlify/functions/news?symbols=" + encodeURIComponent(CORE.join(","));
+  const r = await fetch(url, { cache:"no-store" });
+  const j = await r.json();
+  const list = document.getElementById("newsList"); list.innerHTML="";
+  (j.news||[]).slice(0,25).forEach(n=>{
+    const d = new Date(n.publishedAt); const t = isNaN(d)? "" : " — " + d.toLocaleString();
+    const li = document.createElement("li"); li.innerHTML = `<a href="${n.url}" target="_blank">${n.title}</a><span class="muted">${t} · ${n.source||""}</span>`;
+    list.appendChild(li);
+  });
+}
+
+async function loadMemes(){
+  const url = BACKEND_BASE + "/.netlify/functions/memes?symbols=" + encodeURIComponent(CORE.join(","));
+  const r = await fetch(url, { cache:"no-store" });
+  const j = await r.json();
+  const list = document.getElementById("memesList"); list.innerHTML="";
+  let totalScore = 0, totalCount = 0;
+  (j.symbols||[]).forEach(sym=>{
+    const b = j.memes?.[sym]; if(!b) return;
+    totalScore += b.score||0; totalCount += b.count||0;
+    const top = (b.items||[]).slice(0,10);
+    top.forEach(item=>{
+      const date = new Date((item.created_utc||0)*1000);
+      const t = isNaN(date)? "" : " — " + date.toLocaleString();
+      const li = document.createElement("li");
+      li.innerHTML = `<a href="${item.url}" target="_blank">[${item.platform}] ${sym}: ${item.title}</a><span class="muted">${t} · ❤ ${item.ups||0}${item.meme?' · meme':''}</span>`;
+      list.appendChild(li);
+    });
+  });
+  document.getElementById("mood").textContent = `total posts: ${totalCount} · mood score: ${totalScore.toFixed(1)}`;
+}
+
+(async function init(){
+  setTab("news");
+  await loadNews();
+  await loadMemes();
+  stamp();
+  setInterval(async ()=>{
+    try{ await loadNews(); await loadMemes(); stamp(); }catch(e){}
+  }, 120000);
+})();
+</script>
+</body>
+</html>
