@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Strategy Dashboard</title>
+<link rel="stylesheet" href="assets/dashboard.css">
+<meta name="theme-color" content="#0b0f14">
+</head>
+<body>
+<header>
+  <h1>AI Strategy Dashboard <span id="asof" class="badge">Loading…</span></h1>
+  <div class="controls">
+    <label>Strategy:</label>
+    <select id="strategyMode">
+      <option value="scalper">Scalper (minutes–hours)</option>
+      <option value="swing" selected>Swing (days–weeks)</option>
+      <option value="longterm">Long-Term</option>
+    </select>
+    <button id="refreshBtn">Refresh</button>
+    <span class="muted">Backend: <span id="backend"></span></span>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <table id="tbl">
+      <thead><tr>
+        <th>Ticker</th><th class="right">Price</th><th class="right">Chg%</th><th>AI Recommendation</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="muted">Signals are informational only, not financial advice.</div>
+  </section>
+</main>
+
+<script>
+const BACKEND_BASE = "https://opendoorstock.netlify.app";
+document.getElementById("backend").textContent = BACKEND_BASE;
+
+const SYMBOLS = ["OPEN","LX","LCID","META","2222.SR"];
+const STATE = { quotes:{}, news:[], memes:{}, ai:{}, mode: localStorage.getItem("mode") || "swing" };
+
+document.getElementById("strategyMode").value = STATE.mode;
+document.getElementById("strategyMode").addEventListener("change", e => {
+  STATE.mode = e.target.value; localStorage.setItem("mode", STATE.mode);
+  runAIForAll();
+});
+
+document.getElementById("refreshBtn").addEventListener("click", ()=> init(true));
+
+function stamp(){ document.getElementById("asof").textContent = "Updated " + new Date().toLocaleString(); }
+
+async function fetchJSON(url){ const r = await fetch(url, { cache:"no-store" }); if(!r.ok) throw new Error("HTTP "+r.status+" @ "+url); return r.json(); }
+
+async function loadQuotes(){ const j = await fetchJSON(BACKEND_BASE + "/.netlify/functions/quotes?symbols=" + encodeURIComponent(SYMBOLS.join(","))); STATE.quotes = j.quotes || {}; }
+async function loadNews(){ const j = await fetchJSON(BACKEND_BASE + "/.netlify/functions/news?symbols=" + encodeURIComponent(SYMBOLS.join(","))); STATE.news = j.news || []; }
+async function loadMemes(){ const j = await fetchJSON(BACKEND_BASE + "/.netlify/functions/memes?symbols=" + encodeURIComponent(SYMBOLS.join(","))); STATE.memes = j.memes || {}; }
+
+function topNewsFor(sym, n=5){
+  const nameHints = {
+    "OPEN": ["opendoor","$open","open stock"],
+    "LCID": ["lucid","$lcid"],
+    "META": ["meta","facebook","$meta"],
+    "LX": ["lexin","lexinfintech","$lx"],
+    "2222.SR": ["aramco","saudi aramco","2222","tadawul","أرامكو"]
+  };
+  const hints = (nameHints[sym]||[sym]).map(s=>s.toLowerCase());
+  const hits = (STATE.news||[]).filter(a=> (a.title||"").toLowerCase().includes(sym.toLowerCase()) || hints.some(h=> (a.title||"").toLowerCase().includes(h)));
+  return hits.slice(0,n);
+}
+
+function assembleData(sym){
+  return {
+    quote: STATE.quotes[sym] || {},
+    news: topNewsFor(sym, 5),
+    memes: STATE.memes[sym] || { count:0, score:0, items:[] },
+    levels: sym==="OPEN" ? { support:["2.30","2.40"], resistance:["3.50"], stop:["1.80"] } : {}
+  };
+}
+
+async function getAI(symbol, data){
+  const r = await fetch(BACKEND_BASE + "/.netlify/functions/ai", {
+    method: "POST",
+    headers: { "content-type":"application/json" },
+    body: JSON.stringify({ symbol, data, mode: STATE.mode })
+  });
+  if (!r.ok){ const t = await r.text(); throw new Error(t); }
+  const j = await r.json();
+  return j.advice;
+}
+
+function ensureRow(sym){
+  const tbody = document.querySelector("#tbl tbody");
+  let tr = tbody.querySelector(`tr[data-sym='${sym}']`);
+  if (!tr){
+    tr = document.createElement("tr");
+    tr.dataset.sym = sym;
+    tr.innerHTML = `<td>${sym}</td><td class="right" id="p-${sym}">—</td><td class="right" id="c-${sym}">—</td><td id="ai-${sym}" class="muted">Waiting…</td>`;
+    tbody.appendChild(tr);
+  }
+  return tr;
+}
+
+function renderQuotes(){
+  SYMBOLS.forEach(sym=>{
+    const q = STATE.quotes[sym] || {};
+    const p = (q.price!=null)? Number(q.price).toFixed(2): "—";
+    const ch = (q.changePct!=null)? Number(q.changePct).toFixed(2) + "%" : "—";
+    ensureRow(sym);
+    const pc = document.getElementById("p-"+sym);
+    const cc = document.getElementById("c-"+sym);
+    pc.textContent = p; cc.textContent = ch;
+    cc.style.color = (q.changePct||0) >= 0 ? "var(--green)" : "var(--red)";
+  });
+}
+
+async function runAIForAll(){
+  if (!("Notification" in window)) { /* ignore */ }
+  else if (Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch(e){}
+  }
+
+  for (const sym of SYMBOLS){
+    const cell = document.getElementById("ai-"+sym);
+    if (cell) cell.textContent = "Thinking…";
+    const data = assembleData(sym);
+    try{
+      const advice = await getAI(sym, data);
+      if (cell) cell.textContent = advice;
+      const txt = (advice||'').toUpperCase();
+      if (("Notification" in window) && Notification.permission === "granted" && (txt.includes("BUY") || txt.includes("SELL"))){
+        new Notification(`AI ${STATE.mode.toUpperCase()} — ${sym}`, { body: advice });
+      }
+    }catch(e){
+      if (cell) cell.textContent = "AI error";
+    }
+  }
+}
+
+async function init(force=false){
+  try{
+    await Promise.all([loadQuotes(), loadNews(), loadMemes()]);
+    renderQuotes();
+    await runAIForAll();
+    stamp();
+  }catch(e){
+    console.error(e);
+    stamp();
+  }
+}
+
+init();
+setInterval(init, 120000);
+</script>
+</body>
+</html>
